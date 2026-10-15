@@ -1,0 +1,50 @@
+name: Temporary Windows RDP VPS
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Configure RDP & Disable NLA
+        shell: powershell
+        run: |
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+          
+          # Admin Password Setup
+          $AdminUser = [adsi]"WinNT://./runneradmin,user"
+          $AdminUser.SetPassword("P@ssword12345")
+          $AdminUser.SetInfo()
+
+      - name: Install and Connect Tailscale
+        shell: powershell
+        env:
+          TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
+        run: |
+          choco install tailscale -y
+          $env:Path += ";C:\Program Files\Tailscale"
+          tailscale up --auth-key=$env:TAILSCALE_AUTHKEY --unattended --accept-risk=all
+
+      - name: Display Connection Info
+        shell: powershell
+        run: |
+          $env:Path += ";C:\Program Files\Tailscale"
+          Start-Sleep -Seconds 5
+          $ip = (tailscale ip -4)
+          Write-Host "==========================================" -ForegroundColor Green
+          Write-Host "Tailscale IP : $ip" -ForegroundColor Yellow
+          Write-Host "Username     : runneradmin" -ForegroundColor Yellow
+          Write-Host "Password     : P@ssword12345" -ForegroundColor Yellow
+          Write-Host "==========================================" -ForegroundColor Green
+
+      - name: Keep Alive
+        shell: powershell
+        run: |
+          $i = 0
+          while ($i -lt 360) {
+            Start-Sleep -Seconds 60
+            $i++
+          }
